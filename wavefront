@@ -1,0 +1,174 @@
+#!/usr/bin/env perl
+
+use 5.016;
+use warnings;
+use strict;
+use autodie;
+
+use SDL;
+use SDL::Video;
+use SDL::Event;
+use SDL::Events;
+use OpenGL;
+use Math::Trig;
+
+use Data::Printer;
+
+usage() if @ARGV != 1;
+
+my ($filename) = @ARGV;
+
+my $data = load_obj_file($filename);
+
+my $WIDTH = 1440;
+my $HEIGHT = 900;
+my $FOV = 80;
+
+SDL::init(SDL_INIT_VIDEO);
+
+SDL::Video::set_video_mode($WIDTH, $HEIGHT, 32, SDL_OPENGL);
+
+glShadeModel(GL_SMOOTH);
+glCullFace(GL_BACK);
+glFrontFace(GL_CCW);
+#glEnable(GL_CULL_FACE);
+glEnable(GL_DEPTH_TEST);
+glDepthFunc(GL_LESS);
+glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+glHint(GL_POINT_SMOOTH_HINT, GL_NICEST);
+glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+{
+    my $fov = tan(deg2rad($FOV/2));
+    my $near = 1;
+    my $far = 100;
+    my $left = $fov * $near;
+    my $top = $left * $HEIGHT/$WIDTH;
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glFrustum(-$left, $left, -$top, $top, $near, $far);
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+}
+
+my $zoom = -50;
+my $rot_x = 0;
+my $rot_y = 0;
+
+my $e = SDL::Event->new;
+my $done = 0;
+my $keydown = 0;
+
+while (!$done) {
+
+    SDL::Events::pump_events;
+    while (SDL::Events::poll_event($e)) {
+        given ($e->type) {
+            when (SDL_KEYDOWN) {
+                $keydown = $e->key_sym;
+            }
+            when (SDL_KEYUP) {
+                $keydown = 0;
+            }
+        }
+    }
+
+    if ($keydown) {
+        given ($keydown) {
+            when (SDLK_ESCAPE) {
+                $done = 1;
+            }
+            when (SDLK_EQUALS) {
+                $zoom += 0.5;
+            }
+            when (SDLK_MINUS) {
+                $zoom += -0.5;
+            }
+            when (SDLK_UP) {
+                $rot_x += -1;
+            }
+            when (SDLK_DOWN) {
+                $rot_x += 1;
+            }
+            when (SDLK_LEFT) {
+                $rot_y += -1;
+            }
+            when (SDLK_RIGHT) {
+                $rot_y += 1;
+            }
+        }
+    }
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glTranslatef(0, 0, $zoom);
+    glRotatef($rot_x, 1, 0, 0);
+    glRotatef($rot_y, 0, 1, 0);
+
+    glClearColor(0.0, 0.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glBegin(GL_TRIANGLES);
+
+    glColor3f(1,1,1);
+
+    for my $tri (@{$data->{tris}}) {
+        glVertex3f(@{$data->{vertices}->[$tri->[0]->[0]]});
+        glVertex3f(@{$data->{vertices}->[$tri->[1]->[0]]});
+        glVertex3f(@{$data->{vertices}->[$tri->[2]->[0]]});
+    }
+
+    glEnd();
+
+    SDL::Video::GL_swap_buffers
+}
+
+
+
+sub load_obj_file {
+    my ($filename) = @_;
+
+    my %data = (
+        vertices => [],
+        texcoords => [],
+        normals => [],
+        tris => [],
+    );
+
+    open my $fh, "<", $filename;
+
+    while (my $line = <$fh>) {
+        next if substr($line, 0, 1) eq '#';
+
+        my ($cmd, @args) = split /\s+/, $line;
+
+        given ($cmd) {
+            when ("v") {
+                push $data{vertices}, \@args;
+            }
+            when ("vt") {
+                push $data{texcoords}, \@args;
+            }
+            when ("vn") {
+                push $data{normals}, \@args;
+            }
+            when ("f") {
+                push $data{tris}, [ map { [ map { $_-1 } split '/' ] } @args ];
+            }
+            default {
+                say "W: unknown command '$cmd' at $filename:$.";
+            }
+        }
+    }
+
+    close $fh;
+
+    return \%data;
+}
+
+sub usage {
+    say "usage: wavefront <model.obj>";
+    exit 1;
+}
