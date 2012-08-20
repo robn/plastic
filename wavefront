@@ -9,7 +9,7 @@ use SDL;
 use SDL::Video;
 use SDL::Event;
 use SDL::Events;
-use OpenGL;
+use OpenGL qw(:all);
 use Math::Trig;
 
 use Data::Printer;
@@ -52,6 +52,9 @@ glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 }
+
+my $vertex_array = OpenGL::Array->new_list(GL_FLOAT, map { @$_ } @{$data->{vertices}});
+my $index_array = OpenGL::Array->new_list(GL_UNSIGNED_SHORT, map { map { $_->[0] } @$_ } @{$data->{tris}});
 
 my $zoom = -50;
 my $rot_x = 0;
@@ -110,17 +113,12 @@ while (!$done) {
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glBegin(GL_TRIANGLES);
-
     glColor3f(1,1,1);
 
-    for my $tri (@{$data->{tris}}) {
-        glVertex3f(@{$data->{vertices}->[$tri->[0]->[0]]});
-        glVertex3f(@{$data->{vertices}->[$tri->[1]->[0]]});
-        glVertex3f(@{$data->{vertices}->[$tri->[2]->[0]]});
-    }
-
-    glEnd();
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer_p(3, $vertex_array);
+    glDrawElements_c(GL_TRIANGLES, $index_array->elements, GL_UNSIGNED_SHORT, $index_array->ptr);
+    glDisableClientState(GL_VERTEX_ARRAY);
 
     SDL::Video::GL_swap_buffers
 }
