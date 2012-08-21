@@ -138,6 +138,8 @@ sub load_obj_file {
     open my $fh, "<", $filename;
 
     while (my $line = <$fh>) {
+        chomp $line;
+        next if $line =~ m/^\s*$/;
         next if substr($line, 0, 1) eq '#';
 
         my ($cmd, @args) = split /\s+/, $line;
